@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block body %}
+<div class="row">
+  <div class="col-lg-2">
+    <p class="lead">Go exploring</p>
+    <form name="input" action="/index" method="POST">
+      <ul class="input">
+        <li>Start: {{ form.address(size=30) }}</li>
+        <li>Distance: {{ form.distance(size=4) }}</li>
+        <li>
+          <ul class="input">
+          {% for subfield in form.units %}
+          <li>{{ subfield }} {{ subfield.label }}</li>
+          {% endfor %}
+          </ul>
+        </li>
+      </ul>
+      <button type="submit" class="btn btn-lg btn-primary">Go!</button>
+    </form>
+  </div><!-- /col-->
+
+  <div class="col-lg-2">
+  </div>
+
+  <div class="mastfoot">
+    <div class="inner">
+      <p>
+        Cover template for
+        <a href="http://getbootstrap.com">Bootstrap</a>, by
+        <a href="https://twitter.com/mdo">@mdo</a>.
+      </p>
+    </div>
+  </div>
+</div>
+{% endblock %}
+
