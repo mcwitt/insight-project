@@ -1,8 +1,15 @@
+import numpy as np
 from datetime import datetime
-from routedb import RouteDB, Node, WayType, Way, WayNode
-from sqlalchemy import not_
+from pyproj import Proj
+from routedb import RouteDB, Node, Segment, Way, WayType
+from sqlalchemy import cast, not_
+from geoalchemy2 import Geography
+from geoalchemy2.elements import WKTElement
 from time import time
 from xml.etree.cElementTree import iterparse
+
+proj = Proj('+init=EPSG:3857')
+origin = proj(-122.4376, 37.777) # SF city center
 
 walkable_types = (
     'primary',
@@ -38,6 +45,7 @@ def parse_tags(source, tags):
             yield elem
             elem.clear()
 
+
 def _maybe_add_way(elem, session):
 
     name = None
@@ -64,13 +72,11 @@ def _maybe_add_way(elem, session):
     
     # add topology
     for i, nd in enumerate(elem.iterfind('nd')):
-        session.add(WayNode(way_id=way_id,
+        session.add(Segment(way_id=way_id,
                             idx=i,
                             node_id=int(nd.get('ref')),
                             dist=float('NaN'),
-                            cdist=float('NaN'),
-                            score=float('NaN'),
-                            cscore=float('NaN')))
+                            cdist=float('NaN')))
 
 
 def parse_osm(source, session, log, prune_unused=False):
@@ -90,11 +96,11 @@ def parse_osm(source, session, log, prune_unused=False):
     for i, elem in enumerate(parse_tags(source, ('node', 'way')), 1):
 
         if elem.tag == 'node':
-
-            x, y = (elem.get(_) for _ in ('lon', 'lat'))
+            x, y = elem.get('lon'), elem.get('lat')
+            loc = WKTElement('POINT({} {})'.format(x, y), srid=4326)
 
             session.add(Node(id=int(elem.get('id')),
-                        loc='POINT({} {})'.format(x, y)))
+                        loc=cast(loc, Geography)))
 
             nodes_done += 1
 
