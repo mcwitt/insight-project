@@ -6,7 +6,7 @@ from flask import render_template, request, redirect, url_for
 
 import folium
 from geopy.distance import EARTH_RADIUS
-from geopy.geocoders import Nominatim
+from geopy.geocoders import GoogleV3
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
@@ -14,6 +14,11 @@ from sqlalchemy.orm import sessionmaker
 from photodb import Photo
 
 from shapely import wkb
+
+from routedb import RouteDB, Node, Waypoint
+from route_optimizer import RoutingGraph
+
+from collections import defaultdict
 
 colors = [
     "#7fc97f",
@@ -24,13 +29,25 @@ colors = [
     "#f0027f",
     "#bf5b17",
     "#666666",
-    ]
+]
 
-geolocator = Nominatim()
+geolocator = GoogleV3()
 
-engine = create_engine('postgresql://:app@localhost/app')
+engine = create_engine('postgresql://localhost/photodb')
 Session = sessionmaker(bind=engine)
 session = Session()
+
+db = RouteDB('postgresql://localhost/routesc')
+
+
+def ll2wkt(lat, lon):
+    return 'POINT({} {})'.format(lon, lat)
+
+
+def wkb2ll(b):
+    loc = wkb.loads(b)
+    return loc.x, loc.y
+
 
 
 @app.route('/', methods=['GET','POST'])
@@ -40,65 +57,93 @@ def input():
 
     if request.method == 'POST' and form.validate():
         return redirect(url_for('output',
-                        address=form.address.data,
-                        distance=form.distance.data,
-                        units=form.units.data))
+                        address1=form.address1.data,
+                        address2=form.address2.data))
 
-    return render_template("input.html", form=form)
+    return render_template("index.html", map_name='map.html', form=form)
 
 
-conversion = dict(mi=1609.34, km=1000)
+#conversion = dict(mi=1609.34, km=1000)
 
-@app.route('/output', methods=['GET'])
+@app.route('/output', methods=['GET','POST'])
 def output():
-    address = request.args.get('address')
-    distance = float(request.args.get('distance'))
-    units = request.args.get('units')
+    form = InputForm(request.form)
+    address1 = request.args.get('address1')
+    address2 = request.args.get('address2')
+    #units = request.args.get('units')
 
-    distance_meters = conversion[units]*distance
+    #distance_meters = conversion[units]*distance
 
-    loc = geolocator.geocode(address)
-    loc = (loc.latitude, loc.longitude)
+    loc1 = geolocator.geocode(address1)
+    loc2 = geolocator.geocode(address2)
+
+    latlon1 = np.array([loc1.latitude, loc1.longitude])
+    latlon2 = np.array([loc2.latitude, loc2.longitude])
+    latlon_center = 0.5*(latlon1 + latlon2)
 
     bmap = folium.Map(
-        location=loc,
-        zoom_start=14,
+        location=tuple(latlon_center),
+        zoom_start=14
     )
 
-    bmap.simple_marker(location=loc)
+    bmap.simple_marker(location=latlon1)
+    bmap.simple_marker(location=latlon2)
 
-    bmap.circle_marker(
-        location=loc,
-        radius=distance_meters,
-        fill_color=colors[0],
-        line_color=colors[0],
-        fill_opacity=0.2
-    )
+    point1 = ll2wkt(*latlon1)
+    point2 = ll2wkt(*latlon2)
 
-    query = session.query(Photo).filter(
-        Photo.location.ST_Distance(
-            'POINT({lat} {lon})'.format(
-                lat=loc[0],
-                lon=loc[1],
-            )
-        ) < (180/np.pi)*1e-3*distance_meters/EARTH_RADIUS
-    )
+    query = session.query(Photo)
 
     for photo in query:
-
         color = colors[photo.label % len(colors)]
-        photo_loc = wkb.loads(bytes(photo.location.data))
-
         bmap.circle_marker(
-            location=[photo_loc.x, photo_loc.y],
+            location=wkb2ll(bytes(photo.location.data)),
             popup='<img src={url} width=200 height=200>'.format(url=photo.url),
             fill_color=color,
             line_color=color,
-            radius=20,
+            radius=20
         )
 
-    map_name = 'map.html'
+    ####################
+    # find optimal route
+
+    db = RouteDB('postgresql:///scenicsf')
+
+    try:
+        node1 = db.nearest_rnodes(loc1.latitude, loc1.longitude, 500).first()
+        node2 = db.nearest_rnodes(loc2.latitude, loc2.longitude, 500).first()
+    except:
+        raise # TODO
+
+    waypoints = defaultdict(list)
+
+    for wp in db.get_waypoints(node1, node2):
+        waypoints[wp.way_id].append(wp)
+
+    G = RoutingGraph()
+
+    for way_id, wps in waypoints.items():
+        G.add_way(wps)
+
+    nodes, edges = G.get_optimal_path(node1.id, node2.id)
+
+    for edge in edges:
+        nodes = (
+            db.session.query(Node.loc)
+            .join(Waypoint)
+            .filter((Waypoint.way_id == edge['way_id']) &
+                    (Waypoint.idx >= edge['i']) &
+                    (Waypoint.idx <= edge['j'])))
+        
+        xy = []
+        for node in nodes:
+            loc = wkb.loads(bytes(node.loc.data))
+            xy.append((loc.y, loc.x))
+            
+        bmap.line(xy)
+        
+    map_name = 'map-output.html'
     map_path = '{}/templates/{}'.format(config.base_url, map_name)
     bmap.create_map(path=map_path)
 
-    return render_template("output.html", map_name=map_name)
+    return render_template("index.html", map_name=map_name, form=form)

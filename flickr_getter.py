@@ -4,11 +4,13 @@ from datetime import date, timedelta
 from time import sleep
 from credentials.flickr import api_key, api_secret
 
-output_name = "photometa{n:02d}.csv"
+output_name = "photos-sc{n:02d}.csv"
 start_date = date(2014,9,12)
 end_date = date(2015,9,12)
-lat, lon = 37.7577, -122.4376 # SF
-radius = 20 # km
+#lat, lon = 37.7577, -122.4376 # SF
+lat, lon = 36.971249, -122.032023 # SC
+#radius = 20 # km
+radius = 5 # km
 
 api = FlickrAPI(api_key, api_secret)
 
@@ -118,7 +120,8 @@ def get_size(elem):
 
 if __name__ == '__main__':
 
-    import os, sys
+    import os
+    import sys
 
     # don't overwrite existing output files (increment suffix)
     n = 0

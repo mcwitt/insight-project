@@ -1,4 +1,4 @@
-from sqlalchemy import cast, create_engine, func
+from sqlalchemy import cast, create_engine, distinct, func
 from sqlalchemy import BigInteger, Column, Float, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship, sessionmaker
 from sqlalchemy.ext.declarative import declarative_base
@@ -14,14 +14,7 @@ class Node(Base):
     id = Column(BigInteger, primary_key=True)
     loc = Column(Geography('POINT'), index=True)
     num_ways = Column(Integer)
-    ways = relationship('Segment', backref='node', cascade='delete')
-
-
-class Score(Base):
-    __tablename__ = 'score'
-    seg_id = Column(Integer, ForeignKey('segment.id'), primary_key=True)
-    score = Column(Float)
-    cscore = Column(Float)
+    ways = relationship('Waypoint', backref='node', cascade='delete')
 
 
 class WayType(Base):
@@ -37,15 +30,16 @@ class Way(Base):
     way_type_id = Column(Integer, ForeignKey('way_type.id'))
 
     
-class Segment(Base):
-    __tablename__ = 'segment'
+class Waypoint(Base):
+    __tablename__ = 'waypoint'
     id = Column(Integer, primary_key=True)
     way_id = Column(BigInteger, ForeignKey('way.id'), index=True)
     idx = Column(Integer)
     node_id = Column(BigInteger, ForeignKey('node.id'))
-    dist = Column(Float)
     cdist = Column(Float)
-    way = relationship('Way', backref='way_segments')
+    cscore = Column(Float)
+    way = relationship('Way', backref='waypoints')
+
 
 
 class RouteDB:
@@ -60,27 +54,38 @@ class RouteDB:
         Base.metadata.create_all(self.engine)
 
 
-    def get_routing_data(self, lat, lon, radius):
-        pt = 'POINT({} {})'.format(lon, lat)
-        query = (
-            self.session
-            .query(Segment, Score)
-            .join(Node)
-            .join(Score)
-            .filter(Node.loc.ST_DWithin(pt, radius) &
-                   (Node.num_ways != 0) &
-                   (Node.num_ways != 2))
-            .order_by(Segment.way_id, Segment.idx))
+    def _in_neighborhood(self, node1, node2, expand=1):
 
-        return query
+        geo1 = cast(node1.loc, Geography)
+        geo2 = cast(node2.loc, Geography)
+        radius = self.session.query(geo1.ST_Distance(geo2)).first()[0]
+        radius *= expand
+
+        return (Node.loc.ST_DWithin(geo1, radius) |
+                Node.loc.ST_DWithin(geo2, radius))
+
+
+    def get_waypoints(self, node1, node2, expand=1):
+
+        is_routing_entry = (
+            (Node.num_ways > 1) |
+            (Node.id in (node1.id, node2.id)))
+
+        return (
+            self.session
+            .query(Waypoint)
+            .join(Node)
+            .filter(self._in_neighborhood(node1, node2, expand) & is_routing_entry)
+            .order_by(Waypoint.way_id, Waypoint.idx))
 
 
     def nearest_rnodes(self, lat, lon, radius):
-        pt = 'SRID=4326;POINT({} {})'.format(lon, lat)
-        return (self.session
-                .query(Node)
-                .filter(Node.loc.ST_DWithin(pt, radius) &
-                       (Node.num_ways != 0))
-                .order_by(Node.loc.ST_Distance(pt)))
+        pt = cast('POINT({} {})'.format(lon, lat), Geography)
+        return (
+            self.session
+            .query(Node)
+            .filter(Node.loc.ST_DWithin(pt, radius) &
+                   (Node.num_ways > 1)) # only look at intersections for now...
+            .order_by(Node.loc.ST_Distance(pt)))
 
 

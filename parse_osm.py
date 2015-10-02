@@ -2,8 +2,7 @@ import numpy as np
 from datetime import datetime
 from pyproj import Proj
 from routedb import RouteDB, Node, Segment, Way, WayType
-from sqlalchemy import cast, not_
-from geoalchemy2 import Geography
+from sqlalchemy import not_
 from geoalchemy2.elements import WKTElement
 from time import time
 from xml.etree.cElementTree import iterparse
@@ -96,12 +95,8 @@ def parse_osm(source, session, log, prune_unused=False):
     for i, elem in enumerate(parse_tags(source, ('node', 'way')), 1):
 
         if elem.tag == 'node':
-            x, y = elem.get('lon'), elem.get('lat')
-            loc = WKTElement('POINT({} {})'.format(x, y), srid=4326)
-
-            session.add(Node(id=int(elem.get('id')),
-                        loc=cast(loc, Geography)))
-
+            loc = 'POINT({} {})'.format(elem.get('lon'), elem.get('lat'))
+            session.add(Node(id=int(elem.get('id')), loc=loc))
             nodes_done += 1
 
         elif elem.tag == 'way':
