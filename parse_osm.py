@@ -1,7 +1,7 @@
 import numpy as np
 from datetime import datetime
 from pyproj import Proj
-from routedb import RouteDB, Node, Segment, Way, WayType
+from routedb import RouteDB, Node, Waypoint, Way, WayType
 from sqlalchemy import not_
 from geoalchemy2.elements import WKTElement
 from time import time
@@ -71,10 +71,9 @@ def _maybe_add_way(elem, session):
     
     # add topology
     for i, nd in enumerate(elem.iterfind('nd')):
-        session.add(Segment(way_id=way_id,
+        session.add(Waypoint(way_id=way_id,
                             idx=i,
                             node_id=int(nd.get('ref')),
-                            dist=float('NaN'),
                             cdist=float('NaN')))
 
 
