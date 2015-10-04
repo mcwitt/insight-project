@@ -2,10 +2,9 @@ from flask import Flask
 
 import numpy as np
 from forms import InputForm
-from flask import render_template, request, redirect, url_for
+from flask import flash, render_template, request, redirect, url_for
 
 import folium
-from geopy.distance import EARTH_RADIUS
 from geopy.geocoders import GoogleV3
 
 from sqlalchemy import create_engine
@@ -55,7 +54,7 @@ def wkb2ll(b):
 
 @app.route('/', methods=['GET','POST'])
 @app.route('/index', methods=['GET','POST'])
-def input():
+def index():
     form = InputForm(request.form)
 
     if request.method == 'POST' and form.validate():
@@ -71,22 +70,21 @@ def input():
 @app.route('/output', methods=['GET','POST'])
 def output():
     form = InputForm(request.form)
+
     address1 = request.args.get('address1')
     address2 = request.args.get('address2')
-    #units = request.args.get('units')
-
-    #distance_meters = conversion[units]*distance
 
     loc1 = geolocator.geocode(address1)
     loc2 = geolocator.geocode(address2)
 
     latlon1 = np.array([loc1.latitude, loc1.longitude])
     latlon2 = np.array([loc2.latitude, loc2.longitude])
+
     latlon_center = 0.5*(latlon1 + latlon2)
 
     bmap = folium.Map(
         location=tuple(latlon_center),
-        zoom_start=14
+        zoom_start=12
     )
 
     bmap.simple_marker(location=latlon1)
@@ -112,11 +110,14 @@ def output():
 
     db = RouteDB('postgresql:///scenicstroll')
 
-    try:
-        node1 = db.nearest_xnodes(loc1.latitude, loc1.longitude, 500).first()
-        node2 = db.nearest_xnodes(loc2.latitude, loc2.longitude, 500).first()
-    except:
-        raise # TODO
+    node1 = db.nearest_xnodes(loc1.latitude, loc1.longitude, 500).first()
+    node2 = db.nearest_xnodes(loc2.latitude, loc2.longitude, 500).first()
+
+    for node, address in zip((node1, node2), (address1, address2)):
+        if not node:
+            flash("Sorry, I don't have data near {} yet. Try something else?"
+                  .format(address))
+            return redirect(url_for('index'))
 
     waypoints = defaultdict(list)
 
@@ -128,7 +129,7 @@ def output():
     for way_id, wps in waypoints.items():
         G.add_way(wps)
 
-    G.update_alpha(10000)
+    G.reweight(alpha=10000)
     nodes, edges = G.get_optimal_path(node1.id, node2.id)
 
     for edge in edges:
@@ -151,5 +152,7 @@ def output():
     bmap.create_map(path=map_path)
 
     return render_template("index.html", map_name=map_name, form=form)
+
+
 if __name__ == '__main__':
     app.run()

@@ -5,8 +5,7 @@
 }
 
 #sidebar.affix {
-  top: 100px;
-  width: 200px;
+  top: 200px;
   padding: 20px;
   color: white;
   background-color: rgba(0,0,0,0.5);
@@ -33,3 +32,13 @@ input[type="text"]
     color: black;
     border-radius: 5px;
 }
+
+ul.flashes {
+    list-style-type: none;
+    padding: 10px 0px 0px 0px;
+}
+
+ul.flashes li {
+    color: orange;
+}
+

@@ -53,30 +53,29 @@
     </nav>
 
     <div class="container">
+
       <div id="map">
         {% include map_name %}
       </div>
 
       <div id="sidebar" class="affix">
         <form name="input" action="/" method="POST">
-          <ul class="input-list"">
-            <li>{{ form.address1(value="Exploratorium", size=20) }}</li>
-            <li>{{ form.address2(value="Lands End Park", size=20) }}</li>
-            <li><ul id="input-units" class="input-list">
-              {% for subfield in form.units %}
-              <li>{{ subfield }} {{ subfield.label }}</li>
-              {% endfor %}
-            </ul></li>
+          <ul class="input-list">
+            <li>{{ form.address1(placeholder="e.g., Exploratorium", size=24) }}</li>
+            <li>{{ form.address2(placeholder="e.g., Lands End Park", size=24) }}</li>
           </ul>
           <button type="submit" class="btn btn-lg btn-primary">Explore</button>
         </form>
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <ul class=flashes>
+            {% for message in messages %}
+              <li>{{ message }}</li>
+            {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
       </div>
-
-      <div class="starter-template">
-        <h1>Bootstrap starter template</h1>
-        <p class="lead">Use this document as a way to quickly start any new project.<br> All you get is this text and a mostly barebones HTML document.</p>
-      </div>
-
     </div><!-- /.container -->
 
 
@@ -87,6 +86,17 @@
     <script src="../../dist/js/bootstrap.min.js"></script>
     <!-- IE10 viewport hack for Surface/desktop Windows 8 bug -->
     <script src="../../assets/js/ie10-viewport-bug-workaround.js"></script>
+
+    <!-- Google Maps API (for geocomplete)-->
+    <script src="http://maps.googleapis.com/maps/api/js?sensor=false&libraries=places"></script>
+    <script src="static/js/jquery.geocomplete.min.js"></script>
+
+    <script type="text/javascript">
+      $(document).ready(function(){
+        $("#address1").geocomplete();
+        $("#address2").geocomplete();
+      });
+    </script>
   </body>
 </html>
 
