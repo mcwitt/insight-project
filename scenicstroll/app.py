@@ -1,7 +1,7 @@
-import config
+from flask import Flask
+
 import numpy as np
-from .forms import InputForm
-from app import app
+from forms import InputForm
 from flask import render_template, request, redirect, url_for
 
 import folium
@@ -11,14 +11,17 @@ from geopy.geocoders import GoogleV3
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from photodb import Photo
+from photo_db import Photo
 
 from shapely import wkb
 
-from routedb import RouteDB, Node, Waypoint
-from route_optimizer import RoutingGraph
+from route_db import RouteDB, Node, Waypoint
+from route_graph import RoutingGraph
 
 from collections import defaultdict
+
+app = Flask(__name__)
+app.config.from_envvar('SCENIC_SETTINGS', silent=True)
 
 colors = [
     "#7fc97f",
@@ -107,11 +110,11 @@ def output():
     ####################
     # find optimal route
 
-    db = RouteDB('postgresql:///scenicsf')
+    db = RouteDB('postgresql:///scenicstroll')
 
     try:
-        node1 = db.nearest_rnodes(loc1.latitude, loc1.longitude, 500).first()
-        node2 = db.nearest_rnodes(loc2.latitude, loc2.longitude, 500).first()
+        node1 = db.nearest_xnodes(loc1.latitude, loc1.longitude, 500).first()
+        node2 = db.nearest_xnodes(loc2.latitude, loc2.longitude, 500).first()
     except:
         raise # TODO
 
@@ -125,6 +128,7 @@ def output():
     for way_id, wps in waypoints.items():
         G.add_way(wps)
 
+    G.update_alpha(10000)
     nodes, edges = G.get_optimal_path(node1.id, node2.id)
 
     for edge in edges:
@@ -143,7 +147,9 @@ def output():
         bmap.line(xy)
         
     map_name = 'map-output.html'
-    map_path = '{}/templates/{}'.format(config.base_url, map_name)
+    map_path = 'templates/{}'.format(map_name)
     bmap.create_map(path=map_path)
 
     return render_template("index.html", map_name=map_name, form=form)
+if __name__ == '__main__':
+    app.run()

@@ -1,14 +1,10 @@
 import numpy as np
 from datetime import datetime
-from pyproj import Proj
-from routedb import RouteDB, Node, Waypoint, Way, WayType
 from sqlalchemy import not_
-from geoalchemy2.elements import WKTElement
 from time import time
 from xml.etree.cElementTree import iterparse
+from scenicstroll.routedb import RouteDB, Node, Waypoint, Way, WayType
 
-proj = Proj('+init=EPSG:3857')
-origin = proj(-122.4376, 37.777) # SF city center
 
 walkable_types = (
     'primary',
@@ -72,9 +68,9 @@ def _maybe_add_way(elem, session):
     # add topology
     for i, nd in enumerate(elem.iterfind('nd')):
         session.add(Waypoint(way_id=way_id,
-                            idx=i,
-                            node_id=int(nd.get('ref')),
-                            cdist=float('NaN')))
+                             idx=i,
+                             node_id=int(nd.get('ref')),
+                             cdist=float('NaN')))
 
 
 def parse_osm(source, session, log, prune_unused=False):
