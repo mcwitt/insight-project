@@ -1,36 +1,45 @@
+body {
+  overflow: hidden;
+}
+
 #map {
-    width: 100%;
-    height: 100%;
     margin-top: 50px;
+    width: 100%;
 }
 
 #sidebar.affix {
-  top: 200px;
-  padding: 20px;
-  color: white;
-  background-color: rgba(0,0,0,0.5);
-  border-radius: 5px;
-  position: fixed;
+    top: 200px;
+    width: 240px;
+    margin: 0px;
+    padding: 20px;
+    color: white;
+    background-color: rgba(0,0,0,0.6);
+    border-radius: 5px;
+    position: fixed;
 }
 
 ul.input-list {
-  list-style-type: none;
-  padding: 0px;
+    list-style-type: none;
+    padding: 0px;
 }
 
 ul.input-list li {
-  margin-bottom: 5px;
+    margin-bottom: 5px;
 }
 
 #input-units li {
-  margin: 0px;
-  display: inline;
+    margin: 0px;
+    display: inline;
 }
 
 input[type="text"]
 {
-    color: black;
+    color: white;
+    background-color: rgba(0,0,0,0);
+    border-color: #AAAAAA;
     border-radius: 5px;
+    border-width: 1px;
+    border-style: solid;
 }
 
 ul.flashes {
@@ -40,5 +49,9 @@ ul.flashes {
 
 ul.flashes li {
     color: orange;
+}
+
+#alpha-slider {
+    margin: 10px;
 }
 

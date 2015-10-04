@@ -15,7 +15,9 @@
     <!-- Bootstrap core CSS -->
     <link href="static/css/bootstrap.min.css" rel="stylesheet">
 
-    <!-- Custom styles for this template -->
+    <!-- bootstrap-slider -->
+    <link href="static/bootstrap-slider/css/bootstrap-slider.css" rel="stylesheet">
+
     <link href="static/css/scenic.css" rel="stylesheet">
 
     <!-- Just for debugging purposes. Don't actually copy these 2 lines! -->
@@ -61,10 +63,11 @@
       <div id="sidebar" class="affix">
         <form name="input" action="/" method="POST">
           <ul class="input-list">
-            <li>{{ form.address1(placeholder="e.g., Exploratorium", size=24) }}</li>
-            <li>{{ form.address2(placeholder="e.g., Lands End Park", size=24) }}</li>
+            <li>{{ form.address1(placeholder="e.g., Exploratorium", size=26) }}</li>
+            <li>{{ form.address2(placeholder="e.g., Lands End Trail", size=26) }}</li>
+            <li>direct<input id="alpha" data-slider-id='alpha-slider' type="text" style="width:100px" data-slider-min="-5" data-slider-max="5" data-slider-step="1" data-slider-value="0"/>scenic</li>
           </ul>
-          <button type="submit" class="btn btn-lg btn-primary">Explore</button>
+          <button type="submit" class="btn btn-primary">Explore</button>
         </form>
         {% with messages = get_flashed_messages() %}
           {% if messages %}
@@ -83,18 +86,29 @@
     ================================================== -->
     <!-- Placed at the end of the document so the pages load faster -->
     <script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
-    <script src="../../dist/js/bootstrap.min.js"></script>
+    <script src="static/js/bootstrap.min.js"></script>
     <!-- IE10 viewport hack for Surface/desktop Windows 8 bug -->
     <script src="../../assets/js/ie10-viewport-bug-workaround.js"></script>
+
+    <!-- bootstrap-slider -->
+    <script src="static/bootstrap-slider/js/bootstrap-slider.js"></script>
 
     <!-- Google Maps API (for geocomplete)-->
     <script src="http://maps.googleapis.com/maps/api/js?sensor=false&libraries=places"></script>
     <script src="static/js/jquery.geocomplete.min.js"></script>
 
     <script type="text/javascript">
+
       $(document).ready(function(){
+
         $("#address1").geocomplete();
         $("#address2").geocomplete();
+
+        $('#alpha').slider({
+          formatter: function(value) {
+            return value;
+          }
+        });
       });
     </script>
   </body>
