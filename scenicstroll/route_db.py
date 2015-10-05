@@ -53,17 +53,14 @@ class Waypoint(Base):
     way = relationship('Way', backref='waypoints')
 
 
+def create_tables(engine):
+    Base.metadata.create_all(engine)
+
 
 class RouteDB:
 
-    def __init__(self, url):
-        self.engine = create_engine(url)
-        Session = sessionmaker(bind=self.engine)
-        self.session = Session()
-
-
-    def create_tables(self):
-        Base.metadata.create_all(self.engine)
+    def __init__(self, session):
+        self.session = session
 
 
     def _in_neighborhood(self, node1, node2, expand=1):

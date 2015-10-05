@@ -34,6 +34,7 @@ ul.input-list li {
 
 input[type="text"]
 {
+    padding: 5px;
     color: white;
     background-color: rgba(0,0,0,0);
     border-color: #AAAAAA;

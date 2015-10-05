@@ -50,7 +50,7 @@
 
 <body>
 
-   <div class="folium-map" id="folium_269819017f9a45dba96c45eb28fac6cf" style="width: 100%; height: 100%"></div>
+   <div class="folium-map" id="folium_6d3af76354fe4681a7fd25e513890d9b" style="width: 100%; height: 100%"></div>
 
    <script>
 
@@ -94,9 +94,9 @@
       /*
       Creates the map and adds the selected layers
       */
-      var map = L.map('folium_269819017f9a45dba96c45eb28fac6cf', {
-                                       center:[0, 0],
-                                       zoom: 1,
+      var map = L.map('folium_6d3af76354fe4681a7fd25e513890d9b', {
+                                       center:[37.7792768, -122.4192704],
+                                       zoom: 2,
                                        maxBounds: bounds,
                                        layers: [base_tile]
                                      });
@@ -122,15 +122,7 @@
 
       
 
-var autobounds = L.featureGroup([]).getBounds()
 
-
-
-
-
-map.fitBounds(autobounds,
-    {"padding": [30, 30]}
-);
 
    </script>
 

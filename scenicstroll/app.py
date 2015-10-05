@@ -39,7 +39,9 @@ engine = create_engine('postgresql://localhost/photodb')
 Session = sessionmaker(bind=engine)
 session = Session()
 
-db = RouteDB('postgresql://localhost/routesc')
+engine = create_engine('postgresql://localhost/scenicstroll2')
+Session = sessionmaker(bind=engine)
+db = RouteDB(Session())
 
 
 def ll2wkt(lat, lon):
@@ -62,7 +64,7 @@ def index():
                         address1=form.address1.data,
                         address2=form.address2.data))
 
-    return render_template("index.html", map_name='map.html', form=form)
+    return render_template("index.html", map_name='map-init.html', form=form)
 
 
 #conversion = dict(mi=1609.34, km=1000)
@@ -76,6 +78,12 @@ def output():
 
     loc1 = geolocator.geocode(address1)
     loc2 = geolocator.geocode(address2)
+
+    for loc, address in zip((loc1, loc2), (address1, address2)):
+        if not loc:
+            flash("Sorry, I don't recognize '{}'. Try something else?"
+                  .format(address))
+            return redirect(url_for('index'))
 
     latlon1 = np.array([loc1.latitude, loc1.longitude])
     latlon2 = np.array([loc2.latitude, loc2.longitude])
@@ -107,8 +115,6 @@ def output():
 
     ####################
     # find optimal route
-
-    db = RouteDB('postgresql:///scenicstroll')
 
     node1 = db.nearest_xnodes(loc1.latitude, loc1.longitude, 500).first()
     node2 = db.nearest_xnodes(loc2.latitude, loc2.longitude, 500).first()

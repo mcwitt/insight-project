@@ -1,9 +1,7 @@
-import numpy as np
 from datetime import datetime
-from sqlalchemy import not_
 from time import time
 from xml.etree.cElementTree import iterparse
-from scenicstroll.routedb import RouteDB, Node, Waypoint, Way, WayType
+from scenicstroll.route_db import create_tables, Node, Waypoint, Way, WayType
 
 
 walkable_types = (
@@ -41,6 +39,12 @@ def parse_tags(source, tags):
             elem.clear()
 
 
+def _inside_bbox(x, y, bbox):
+    xmin, ymin, xmax, ymax = bbox
+    return (x > xmin and y > ymin and
+            x < xmax and y < ymax)
+
+
 def _maybe_add_way(elem, session):
 
     name = None
@@ -52,13 +56,13 @@ def _maybe_add_way(elem, session):
         if tag.get('k') == 'highway':
             way_type = tag.get('v')
             if way_type not in type_id: # not walkable
-                return
+                return False
             
         if tag.get('k') == 'name':
             name = tag.get('v')
     
     if way_type is None:    # no `highway` tag; ignore
-        return
+        return False
     
     way_id = int(elem.get('id'))
     way = Way(id=way_id, name=name, way_type_id=type_id[way_type])
@@ -67,48 +71,47 @@ def _maybe_add_way(elem, session):
     
     # add topology
     for i, nd in enumerate(elem.iterfind('nd')):
-        session.add(Waypoint(way_id=way_id,
-                             idx=i,
-                             node_id=int(nd.get('ref')),
-                             cdist=float('NaN')))
+        node_id = int(nd.get('ref'))
+        if session.query(Node).filter(Node.id == node_id).first():
+            session.add(Waypoint(way_id=way_id, idx=i, node_id=node_id))
+
+    return True
 
 
-def parse_osm(source, session, log, prune_unused=False):
+def parse_osm(source, session, bbox, log):
 
     # way_type table
     for i, name in enumerate(walkable_types):
         session.add(WayType(id=i, name=name))
 
     session.commit()
+    log.write('started parsing XML')
 
     # nodes and ways
     nodes_done = 0
     ways_done = 0
 
-    log.write('started parsing XML')
-
-    for i, elem in enumerate(parse_tags(source, ('node', 'way')), 1):
+    for elem in parse_tags(source, ('node', 'way')):
 
         if elem.tag == 'node':
-            loc = 'POINT({} {})'.format(elem.get('lon'), elem.get('lat'))
+            x, y = elem.get('lon'), elem.get('lat')
+
+            if not _inside_bbox(float(x), float(y), bbox):
+                continue
+
+            loc = 'POINT({} {})'.format(x, y)
             session.add(Node(id=int(elem.get('id')), loc=loc))
             nodes_done += 1
 
         elif elem.tag == 'way':
-            _maybe_add_way(elem, session)
-            ways_done += 1
+            if _maybe_add_way(elem, session):
+                ways_done += 1
 
-        if i % 10000 == 0:
+        if (nodes_done + ways_done) % 10000 == 0:
             log.write('{} nodes, {} ways'.format(nodes_done, ways_done))
             session.commit()
 
     session.commit()
-
-    if prune_unused:
-        log.write('pruning unused nodes...')
-        unused_nodes = session.query(Node).filter(not_(Node.ways.any()))
-        unused_nodes.delete(synchronize_session=False)
-        session.commit()
 
 
 if __name__ == '__main__':
@@ -122,14 +125,22 @@ if __name__ == '__main__':
     parser = ArgumentParser()
     parser.add_argument('input', type=str, help='OSM XML file')
     parser.add_argument('url', type=str, help='database URL')
-    parser.add_argument('--prune', action='store_true', help='prune unused nodes')
+
+    parser.add_argument(
+            '--bbox',
+            type=lambda s: [float(c) for c in s.split(',')],
+            default='-122.525,37.6936,-122.3499,37.8152',
+            help='xmin,ymin,xmax,ymax')
+
     args = parser.parse_args()
 
-    db = RouteDB(args.url)
-    db.create_tables()
+    engine = create_engine(args.url)
+    create_tables(engine)
 
-    #with BZ2File(args.input) as f:
-    #    parse_osm(f, session)
+    Session = sessionmaker(bind=engine)
+    session = Session()
 
-    log = Logger(sys.stdout)
-    parse_osm(args.input, db.session, log, prune_unused=args.prune)
+    parse_osm(args.input,
+              session,
+              args.bbox,
+              Logger(sys.stdout))
