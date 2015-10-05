@@ -20,7 +20,7 @@ from route_graph import RoutingGraph
 from collections import defaultdict
 
 app = Flask(__name__)
-app.config.from_envvar('SCENIC_SETTINGS', silent=True)
+app.config.from_object('config')
 
 colors = [
     "#7fc97f",
@@ -79,7 +79,7 @@ def output():
     loc1 = geolocator.geocode(address1)
     loc2 = geolocator.geocode(address2)
 
-    for loc, address in zip((loc1, loc2), (address1, address2)):
+    for loc, address in ((loc1, address1), (loc2, address2)):
         if not loc:
             flash("Sorry, I don't recognize '{}'. Try something else?"
                   .format(address))
@@ -119,7 +119,7 @@ def output():
     node1 = db.nearest_xnodes(loc1.latitude, loc1.longitude, 500).first()
     node2 = db.nearest_xnodes(loc2.latitude, loc2.longitude, 500).first()
 
-    for node, address in zip((node1, node2), (address1, address2)):
+    for node, address in ((node1, address1), (node2, address2)):
         if not node:
             flash("Sorry, I don't have data near {} yet. Try something else?"
                   .format(address))

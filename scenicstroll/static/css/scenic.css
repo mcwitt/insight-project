@@ -9,7 +9,6 @@ body {
 
 #sidebar.affix {
     top: 200px;
-    width: 240px;
     margin: 0px;
     padding: 20px;
     color: white;
@@ -53,6 +52,6 @@ ul.flashes li {
 }
 
 #alpha-slider {
-    margin: 10px;
+    margin: 0 10px;
 }
 
