@@ -62,7 +62,8 @@ def index():
     if request.method == 'POST' and form.validate():
         return redirect(url_for('output',
                         address1=form.address1.data,
-                        address2=form.address2.data))
+                        address2=form.address2.data,
+                        alpha=form.alpha.data))
 
     return render_template("index.html", map_name='map-init.html', form=form)
 
@@ -71,10 +72,11 @@ def index():
 
 @app.route('/output', methods=['GET','POST'])
 def output():
-    form = InputForm(request.form)
 
+    form = InputForm(request.form)
     address1 = request.args.get('address1')
     address2 = request.args.get('address2')
+    alpha = float(request.args.get('alpha'))
 
     loc1 = geolocator.geocode(address1)
     loc2 = geolocator.geocode(address2)
@@ -135,8 +137,13 @@ def output():
     for way_id, wps in waypoints.items():
         G.add_way(wps)
 
-    G.reweight(alpha=10000)
-    nodes, edges = G.get_optimal_path(node1.id, node2.id)
+    G.reweight(alpha)
+
+    try:
+        nodes, edges = G.get_optimal_path(node1.id, node2.id)
+    except: # TODO: exception?
+        flash("Sorry, I couldn't find a route. Try something else?")
+        return redirect(url_for('index'))
 
     for edge in edges:
         nodes = (
@@ -157,7 +164,13 @@ def output():
     map_path = 'templates/{}'.format(map_name)
     bmap.create_map(path=map_path)
 
-    return render_template("index.html", map_name=map_name, form=form)
+    return render_template(
+        'index.html',
+        map_name=map_name,
+        form=form,
+        address1=address1,
+        address2=address2,
+        alpha=alpha)
 
 
 if __name__ == '__main__':

@@ -55,6 +55,6 @@ class RoutingGraph:
             edge_data = self.G.get_edge_data(*edge)
             dist = edge_data['dist']
             score = edge_data['score']
-            weight = dist*(1 + alpha*score)
+            weight = dist * score**alpha
             self.G.add_edge(*edge, weight=weight)
 

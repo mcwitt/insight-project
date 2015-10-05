@@ -1,5 +1,6 @@
 body {
-  overflow: hidden;
+    padding-top: 50px;
+    overflow: hidden;
 }
 
 #map {
@@ -8,7 +9,7 @@ body {
 }
 
 #sidebar.affix {
-    top: 200px;
+    top: 150px;
     margin: 0px;
     padding: 20px;
     color: white;
@@ -51,7 +52,7 @@ ul.flashes li {
     color: orange;
 }
 
-#alpha-slider {
-    margin: 0 10px;
+#explore {
+    width: 100%;
 }
 
