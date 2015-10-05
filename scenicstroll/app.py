@@ -35,11 +35,11 @@ colors = [
 
 geolocator = GoogleV3()
 
-engine = create_engine('postgresql://localhost/photodb')
+engine = create_engine('postgresql://scenic@localhost/photodb')
 Session = sessionmaker(bind=engine)
 session = Session()
 
-engine = create_engine('postgresql://localhost/scenicstroll2')
+engine = create_engine('postgresql://scenic@localhost/scenicstroll2')
 Session = sessionmaker(bind=engine)
 db = RouteDB(Session())
 
