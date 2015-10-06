@@ -97,7 +97,7 @@ class RouteDB:
             self.session
             .query(Node)
             .filter(Node.loc.ST_DWithin(pt, radius) &
-                (Node.num_ways > 1))    # XXX: only allow intersections for now...
+                   (Node.num_ways > 1)) # XXX: only allow intersections for now...
             .order_by(Node.loc.ST_Distance(pt)))
 
 
