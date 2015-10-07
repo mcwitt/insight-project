@@ -10,7 +10,7 @@ from geopy.geocoders import GoogleV3
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
-from photo_db import Photo
+from photo_db import Photo, PhotoCluster
 
 from shapely import wkb
 
@@ -35,23 +35,15 @@ colors = [
 
 geolocator = GoogleV3()
 
-engine = create_engine('postgresql://scenic@localhost/photodb')
-Session = sessionmaker(bind=engine)
-session = Session()
-
+# connect database
 engine = create_engine('postgresql://scenic@localhost/scenicstroll2')
 Session = sessionmaker(bind=engine)
-db = RouteDB(Session())
+session = Session()
+db = RouteDB(session)
 
 
 def ll2wkt(lat, lon):
     return 'POINT({} {})'.format(lon, lat)
-
-
-def wkb2ll(b):
-    loc = wkb.loads(b)
-    return loc.x, loc.y
-
 
 
 @app.route('/', methods=['GET','POST'])
@@ -103,16 +95,20 @@ def output():
     point1 = ll2wkt(*latlon1)
     point2 = ll2wkt(*latlon2)
 
-    query = session.query(Photo)
+    for cluster in session.query(PhotoCluster):
+        loc = wkb.loads(bytes(cluster.centroid.data))
 
-    for photo in query:
-        color = colors[photo.label % len(colors)]
+        most_viewed_url = (
+            session.query(Photo.url)
+                   .filter(Photo.id == cluster.most_viewed)
+                   .first())[0]
+
         bmap.circle_marker(
-            location=wkb2ll(bytes(photo.location.data)),
-            popup='<img src={url} width=200 height=200>'.format(url=photo.url),
-            fill_color=color,
-            line_color=color,
-            radius=20
+            location=(loc.y, loc.x),
+            popup='<img src={url} width=200>'.format(url=most_viewed_url),
+            fill_color='red',
+            line_color='red',
+            radius=5*np.sqrt(cluster.num_photos)
         )
 
     ####################
