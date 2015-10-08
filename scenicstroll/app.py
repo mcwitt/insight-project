@@ -1,49 +1,27 @@
-from flask import Flask
-
+import folium
 import numpy as np
+from flask import Flask
 from forms import InputForm
 from flask import flash, render_template, request, redirect, url_for
-
-import folium
 from geopy.geocoders import GoogleV3
-
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-
 from photo_db import Photo, PhotoCluster
-
-from shapely import wkb
-
 from route_db import RouteDB, Node, Waypoint
 from route_graph import RoutingGraph
+from shapely import wkb
 
-from collections import defaultdict
 
 app = Flask(__name__)
 app.config.from_object('config')
 
-colors = [
-    "#7fc97f",
-    "#beaed4",
-    "#fdc086",
-    "#ffff99",
-    "#386cb0",
-    "#f0027f",
-    "#bf5b17",
-    "#666666",
-]
-
 geolocator = GoogleV3()
 
 # connect database
-engine = create_engine('postgresql://scenic@localhost/scenicstroll2')
+engine = create_engine(app.config['DATABASE'])
 Session = sessionmaker(bind=engine)
 session = Session()
 db = RouteDB(session)
-
-
-def ll2wkt(lat, lon):
-    return 'POINT({} {})'.format(lon, lat)
 
 
 @app.route('/', methods=['GET','POST'])
@@ -52,48 +30,38 @@ def index():
     form = InputForm(request.form)
 
     if request.method == 'POST' and form.validate():
-        return redirect(url_for('output',
+        return redirect(url_for('route',
                         address1=form.address1.data,
                         address2=form.address2.data,
                         alpha=form.alpha.data))
 
     return render_template("index.html", map_name='map-init.html', form=form)
 
-
 #conversion = dict(mi=1609.34, km=1000)
 
-@app.route('/output', methods=['GET','POST'])
-def output():
-
+@app.route('/route', methods=['GET','POST'])
+def route():
     form = InputForm(request.form)
-    address1 = request.args.get('address1')
-    address2 = request.args.get('address2')
+    addresses = tuple(request.args.get(_) for _ in ('address1', 'address2'))
     alpha = float(request.args.get('alpha'))
+    locs = tuple(geolocator.geocode(address) for address in addresses)
 
-    loc1 = geolocator.geocode(address1)
-    loc2 = geolocator.geocode(address2)
-
-    for loc, address in ((loc1, address1), (loc2, address2)):
+    for loc, address in zip(locs, addresses):
         if not loc:
             flash("Sorry, I don't recognize '{}'. Try something else?"
                   .format(address))
             return redirect(url_for('index'))
 
-    latlon1 = np.array([loc1.latitude, loc1.longitude])
-    latlon2 = np.array([loc2.latitude, loc2.longitude])
-
-    latlon_center = 0.5*(latlon1 + latlon2)
+    latlons = tuple(np.array([loc.latitude, loc.longitude]) for loc in locs)
+    latlon_center = 0.5*(latlons[0] + latlons[1])
 
     bmap = folium.Map(
         location=tuple(latlon_center),
         zoom_start=12
     )
 
-    bmap.simple_marker(location=latlon1)
-    bmap.simple_marker(location=latlon2)
-
-    point1 = ll2wkt(*latlon1)
-    point2 = ll2wkt(*latlon2)
+    bmap.simple_marker(location=latlons[0])
+    bmap.simple_marker(location=latlons[1])
 
     for cluster in session.query(PhotoCluster):
         loc = wkb.loads(bytes(cluster.centroid.data))
@@ -111,35 +79,29 @@ def output():
             radius=5*np.sqrt(cluster.num_photos)
         )
 
-    ####################
+
     # find optimal route
 
-    node1 = db.nearest_xnodes(loc1.latitude, loc1.longitude, 500).first()
-    node2 = db.nearest_xnodes(loc2.latitude, loc2.longitude, 500).first()
+    nodes = tuple(db.get_nearest_xnodes(loc.latitude, loc.longitude, 500).first()
+                  for loc in locs)
 
-    for node, address in ((node1, address1), (node2, address2)):
+    for node, address in zip(nodes, addresses):
         if not node:
             flash("Sorry, I don't have data near {} yet. Try something else?"
                   .format(address))
             return redirect(url_for('index'))
 
-    waypoints = defaultdict(list)
-
-    for wp in db.get_waypoints(node1, node2):
-        waypoints[wp.way_id].append(wp)
-
-    G = RoutingGraph()
-
-    for way_id, wps in waypoints.items():
-        G.add_way(wps)
-
-    G.reweight(alpha)
+    waypoints = db.get_relevant_waypoints(nodes[0], nodes[1])
+    G = RoutingGraph(waypoints, alpha)
 
     try:
-        nodes, edges = G.get_optimal_path(node1.id, node2.id)
-    except: # TODO: exception?
+        nodes, edges = G.get_optimal_path(nodes[0].id, nodes[1].id)
+    except:
         flash("Sorry, I couldn't find a route. Try something else?")
         return redirect(url_for('index'))
+
+    dist = sum(edge['dist'] for edge in edges)
+    flash('Found a {:.1f} mile walk.'.format(dist/1609.34))
 
     for edge in edges:
         nodes = (
@@ -164,8 +126,8 @@ def output():
         'index.html',
         map_name=map_name,
         form=form,
-        address1=address1,
-        address2=address2,
+        address1=addresses[0],
+        address2=addresses[1],
         alpha=alpha)
 
 

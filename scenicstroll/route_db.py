@@ -74,7 +74,7 @@ class RouteDB:
                 Node.loc.ST_DWithin(geog2, radius))
 
 
-    def get_waypoints(self, node1, node2, expand=1):
+    def get_relevant_waypoints(self, node1, node2, expand=1):
 
         # is intersection or terminal point
         is_xnode_or_terminal = (
@@ -91,7 +91,7 @@ class RouteDB:
             .order_by(Waypoint.way_id, Waypoint.idx))
 
 
-    def nearest_xnodes(self, lat, lon, radius):
+    def get_nearest_xnodes(self, lat, lon, radius):
         pt = cast('POINT({} {})'.format(lon, lat), Geography)
         return (
             self.session
