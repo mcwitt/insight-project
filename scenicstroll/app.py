@@ -3,8 +3,9 @@ import numpy as np
 from flask import Flask
 from forms import InputForm
 from flask import flash, render_template, request, redirect, url_for
+from geoalchemy2 import Geography
 from geopy.geocoders import GoogleV3
-from sqlalchemy import create_engine
+from sqlalchemy import cast, create_engine
 from sqlalchemy.orm import sessionmaker
 from photo_db import Photo, PhotoCluster
 from route_db import RouteDB, Node, Waypoint
@@ -37,8 +38,6 @@ def index():
 
     return render_template("index.html", map_name='map-init.html', form=form)
 
-#conversion = dict(mi=1609.34, km=1000)
-
 @app.route('/route', methods=['GET','POST'])
 def route():
     form = InputForm(request.form)
@@ -52,37 +51,13 @@ def route():
                   .format(address))
             return redirect(url_for('index'))
 
-    latlons = tuple(np.array([loc.latitude, loc.longitude]) for loc in locs)
-    latlon_center = 0.5*(latlons[0] + latlons[1])
-
-    bmap = folium.Map(
-        location=tuple(latlon_center),
-        zoom_start=12
-    )
-
-    bmap.simple_marker(location=latlons[0])
-    bmap.simple_marker(location=latlons[1])
-
-    for cluster in session.query(PhotoCluster):
-        loc = wkb.loads(bytes(cluster.centroid.data))
-
-        most_viewed_url = (
-            session.query(Photo.url)
-                   .filter(Photo.id == cluster.most_viewed)
-                   .first())[0]
-
-        bmap.circle_marker(
-            location=(loc.y, loc.x),
-            popup='<img src={url} width=200>'.format(url=most_viewed_url),
-            fill_color='red',
-            line_color='red',
-            radius=5*np.sqrt(cluster.num_photos)
-        )
-
 
     # find optimal route
 
-    nodes = tuple(db.get_nearest_xnodes(loc.latitude, loc.longitude, 500).first()
+    nodes = tuple(db.get_nearest_xnodes(
+                    loc.latitude,
+                    loc.longitude,
+                    app.config['SEARCH_RADIUS']).first()
                   for loc in locs)
 
     for node, address in zip(nodes, addresses):
@@ -101,7 +76,24 @@ def route():
         return redirect(url_for('index'))
 
     dist = sum(edge['dist'] for edge in edges)
-    flash('Found a {:.1f} mile walk.'.format(dist/1609.34))
+    miles = dist/1609.34
+    aan = 'a' if str(miles)[0] in '012345679' else 'an'
+    flash('Found {} {:.1f} mile walk.'.format(aan, miles))
+
+
+    # create map
+
+    latlons = tuple(np.array([loc.latitude, loc.longitude]) for loc in locs)
+    latlon_center = 0.5*(latlons[0] + latlons[1])
+
+    bmap = folium.Map(
+        location=tuple(latlon_center),
+        zoom_start=12
+    )
+
+    bmap.simple_marker(location=latlons[0])
+    bmap.simple_marker(location=latlons[1])
+    nearby_clusters = set()
 
     for edge in edges:
         nodes = (
@@ -112,12 +104,42 @@ def route():
                     (Waypoint.idx <= edge['j'])))
         
         xy = []
+
         for node in nodes:
+
             loc = wkb.loads(bytes(node.loc.data))
             xy.append((loc.y, loc.x))
-            
+            geog = cast(node.loc, Geography)
+
+            nearby_clusters.update(
+                session.query(PhotoCluster).filter(
+                    PhotoCluster.centroid.ST_DWithin(
+                        geog, app.config['SIGHT_DISTANCE'])))
+
         bmap.line(xy)
+
+
+    for cluster in nearby_clusters:
+        loc = wkb.loads(bytes(cluster.centroid.data))
+
+        most_viewed_url = (
+            session.query(Photo.url)
+            .filter(Photo.id == cluster.most_viewed)
+            .first())[0]
+
+        bmap.circle_marker(
+            location=(loc.y, loc.x),
+            popup='<img src={url} width={width}>'.format(
+                url=most_viewed_url,
+                width=app.config['IMAGE_WIDTH']),
+            fill_color='red',
+            line_color='red',
+            radius=5*np.sqrt(cluster.num_photos)
+        )
         
+
+    # mark photo clusters
+
     map_name = 'map-output.html'
     map_path = 'templates/{}'.format(map_name)
     bmap.create_map(path=map_path)
