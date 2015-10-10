@@ -3,14 +3,14 @@ import numpy as np
 from flask import Flask
 from forms import InputForm
 from flask import flash, render_template, request, redirect, url_for
-from geoalchemy2 import Geography
+from geoalchemy2 import Geography, Geometry
+from geoalchemy2.functions import ST_X, ST_Y
 from geopy.geocoders import GoogleV3
 from sqlalchemy import cast, create_engine
 from sqlalchemy.orm import sessionmaker
 from photo_db import Photo, PhotoCluster
 from route_db import RouteDB, Node, Waypoint
 from route_graph import RoutingGraph
-from shapely import wkb
 
 
 app = Flask(__name__)
@@ -93,34 +93,45 @@ def route():
 
     bmap.simple_marker(location=latlons[0])
     bmap.simple_marker(location=latlons[1])
-    nearby_clusters = set()
+    nearby_labels = set()
 
     for edge in edges:
+
         nodes = (
-            db.session.query(Node.loc)
+            db.session.query(
+                Node,
+                ST_X(cast(Node.loc, Geometry)),
+                ST_Y(cast(Node.loc, Geometry)))
             .join(Waypoint)
-            .filter((Waypoint.way_id == edge['way_id']) &
-                    (Waypoint.idx >= edge['i']) &
-                    (Waypoint.idx <= edge['j'])))
+            .filter(
+                (Waypoint.way_id == edge['way_id']) &
+                (Waypoint.idx >= edge['idx1']) &
+                (Waypoint.idx <= edge['idx2'])))
         
-        xy = []
+        yx = []
 
-        for node in nodes:
+        for node, x, y in nodes:
 
-            loc = wkb.loads(bytes(node.loc.data))
-            xy.append((loc.y, loc.x))
+            yx.append((y, x))
             geog = cast(node.loc, Geography)
 
-            nearby_clusters.update(
-                session.query(PhotoCluster).filter(
-                    PhotoCluster.centroid.ST_DWithin(
+            nearby_labels_query = (
+                session.query(PhotoCluster.label)
+                .filter(PhotoCluster.centroid.ST_DWithin(
                         geog, app.config['SIGHT_DISTANCE'])))
 
-        bmap.line(xy)
+            nearby_labels.update(label for (label,) in nearby_labels_query)
 
+        bmap.line(yx)
 
-    for cluster in nearby_clusters:
-        loc = wkb.loads(bytes(cluster.centroid.data))
+    nearby_clusters = (
+        session.query(
+            PhotoCluster,
+            ST_X(cast(PhotoCluster.centroid, Geometry)),
+            ST_Y(cast(PhotoCluster.centroid, Geometry)))
+        .filter(PhotoCluster.label.in_(nearby_labels)))
+
+    for cluster, x, y in nearby_clusters:
 
         most_viewed_url = (
             session.query(Photo.url)
@@ -128,7 +139,7 @@ def route():
             .first())[0]
 
         bmap.circle_marker(
-            location=(loc.y, loc.x),
+            location=(y, x),
             popup='<img src={url} width={width}>'.format(
                 url=most_viewed_url,
                 width=app.config['IMAGE_WIDTH']),

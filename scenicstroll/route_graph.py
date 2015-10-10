@@ -2,78 +2,62 @@ import networkx as nx
 from collections import defaultdict
 
 
-def _add_way(G, waypoints):
+def _add_way(G, way_id, waypoints, alpha=0):
+    """
+    Add way, specified by list of waypoints, to the routing graph G.
+    The parameter `alpha` controls the relative weighting of distance
+    and score through the formula weight = distance * score^alpha.
+    """
 
     wp_next = iter(waypoints)
     next(wp_next)
 
     for wp1, wp2 in zip(waypoints, wp_next):
 
-        u, v = wp1.node_id, wp2.node_id
+        u1, u2 = wp1.node_id, wp2.node_id
         dist = wp2.cdist - wp1.cdist
         score = wp2.cscore - wp1.cscore
+        weight = dist * score**alpha
 
-        # TODO: eventually will select path of lowest weight
-        if ((u, v) not in G.edge or dist < G.get_edge_data[u, v]['dist']):
+        if not G.has_edge(u1, u2) or weight < G.get_edge_data(u1, u2)['weight']:
 
-            data = {'i': wp1.idx,
-                    'j': wp2.idx,
-                    'way_id': wp1.way_id,
-                    'dist': dist,
-                    'score': score}
+            edge_data = dict(way_id=way_id,
+                             idx1=wp1.idx,
+                             idx2=wp2.idx,
+                             dist=dist,
+                             score=score,
+                             weight=weight)
 
-            G.add_edge(u, v, data)
+            G.add_edge(u1, u2, edge_data)
 
 
 class RoutingGraph:
 
-    def __init__(self, waypoints, alpha=1):
+    def __init__(self, waypoints, alpha=0):
 
-        G = nx.Graph() 
+        self._alpha = alpha
+        self.G = nx.Graph()
         ways = defaultdict(list)
 
         for wp in waypoints:
             ways[wp.way_id].append(wp)
 
         for way_id, wps in ways.items():
-            _add_way(G, wps)
+            _add_way(self.G, way_id, wps, alpha)
 
-        self.G = G.to_undirected()
-        self.alpha = alpha
 
     @property
     def alpha(self):
         return self._alpha
 
-    @alpha.setter
-    def alpha(self, value):
-        """
-        Update the relative weight of distance and scenery score used to
-        determine the edge weights. Weights are determined from
-        W = dist * (1 + alpha * score),
-        where 0 < score < 1 (lower is better).
-        """
-
-        self._alpha = value
-
-        for edge in self.G.edges_iter():
-            edge_data = self.G.get_edge_data(*edge)
-            dist = edge_data['dist']
-            score = edge_data['score']
-            weight = dist * score**value
-            self.G.add_edge(*edge, weight=weight)
-
-
-
-    def get_optimal_path(self, u, v):
+    def get_optimal_path(self, u1, u2):
         """
         Find the optimal path (i.e. path of least total weight) between the
-        nodes with IDs u, v.
+        nodes identified by u1, u2.
         """
 
-        self.G = self.G.to_undirected()
-        nodes = nx.shortest_path(self.G, u, v, weight='weight')
-        edges = [self.G.get_edge_data(u_, v_) for u_, v_ in zip(nodes, nodes[1:])]
+        nodes = nx.shortest_path(self.G, u1, u2, weight='weight')
+        edges = [self.G.get_edge_data(u1_, u2_) for u1_, u2_ in zip(nodes, nodes[1:])]
 
         return nodes, edges
 

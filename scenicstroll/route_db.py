@@ -78,8 +78,7 @@ class RouteDB:
 
         # is intersection or terminal point
         is_xnode_or_terminal = (
-            (Node.num_ways > 1) |
-            (Node.id in (node1.id, node2.id)))
+            (Node.num_ways > 1) | (Node.id == node1.id) | (Node.id == node2.id))
 
         in_neighborhood = self._in_neighborhood(node1, node2, expand)
 
