@@ -40,9 +40,17 @@ def index():
 
 @app.route('/route', methods=['GET','POST'])
 def route():
-    form = InputForm(request.form)
-    addresses = tuple(request.args.get(_) for _ in ('address1', 'address2'))
+
+    address1 = request.args.get('address1')
+    address2 = request.args.get('address2')
     alpha = float(request.args.get('alpha'))
+
+    form = InputForm(request.form,
+                     address1=address1,
+                     address2=address2,
+                     alpha=alpha)
+
+    addresses = (address1, address2)
     locs = tuple(geolocator.geocode(address) for address in addresses)
 
     for loc, address in zip(locs, addresses):
