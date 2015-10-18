@@ -1,16 +1,18 @@
 body {
-    padding-top: 50px;
+    padding: 0;
+    margin: 0;
     overflow: hidden;
 }
 
-#map {
-    margin-top: 50px;
+html, body, #map {
+    height: 100%;
     width: 100%;
 }
 
 #sidebar.affix {
     top: 150px;
-    margin: 0px;
+    width: 250px;
+    margin: 20px;
     padding: 20px;
     color: white;
     background-color: rgba(0,0,0,0.6);
@@ -27,13 +29,9 @@ ul.input-list li {
     margin-bottom: 5px;
 }
 
-#input-units li {
-    margin: 0px;
-    display: inline;
-}
-
 input[type="text"]
 {
+    width: 100%;
     padding: 5px;
     color: white;
     background-color: rgba(0,0,0,0);
@@ -43,16 +41,22 @@ input[type="text"]
     border-style: solid;
 }
 
-ul.flashes {
-    list-style-type: none;
-    padding: 10px 0px 0px 0px;
+#status {
+    width: 100%;
+    padding: 10px;
+    color: orange;
 }
 
-ul.flashes li {
-    color: orange;
+.slider-track {
+    background: rgba(0,0,0,0.2);
+}
+
+.slider-selection {
+    background: rgba(255,153,51,1);
 }
 
 #explore {
     width: 100%;
+    margin: 10px 0;
 }
 

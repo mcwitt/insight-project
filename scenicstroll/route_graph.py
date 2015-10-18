@@ -28,7 +28,8 @@ def _add_way(G, way_id, waypoints, alpha=0):
                              score=score,
                              weight=weight)
 
-            G.add_edge(u1, u2, edge_data)
+            G.add_edge(u1, u2, dict(reversed=False, **edge_data))
+            G.add_edge(u2, u1, dict(reversed=True, **edge_data))
 
 
 class RoutingGraph:
@@ -36,7 +37,7 @@ class RoutingGraph:
     def __init__(self, waypoints, alpha=0):
 
         self._alpha = alpha
-        self.G = nx.Graph()
+        self.G = nx.DiGraph()
         ways = defaultdict(list)
 
         for wp in waypoints:

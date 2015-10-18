@@ -1,8 +1,6 @@
-import folium
-import numpy as np
-from flask import Flask
+from flask import Flask, jsonify
 from forms import InputForm
-from flask import flash, render_template, request, redirect, url_for
+from flask import render_template, request, redirect, url_for
 from geoalchemy2 import Geography, Geometry
 from geoalchemy2.functions import ST_X, ST_Y
 from geopy.geocoders import GoogleV3
@@ -15,7 +13,6 @@ from route_graph import RoutingGraph
 
 app = Flask(__name__)
 app.config.from_object('config')
-
 geolocator = GoogleV3()
 
 # connect database
@@ -24,43 +21,31 @@ Session = sessionmaker(bind=engine)
 session = Session()
 db = RouteDB(session)
 
-
-@app.route('/', methods=['GET','POST'])
-@app.route('/index', methods=['GET','POST'])
+@app.route('/')
+@app.route('/index')
 def index():
     form = InputForm(request.form)
+    return render_template('index.html',
+                           form=form,
+                           center_latlon='37.7577,-122.4376',
+                           zoom=12)
 
-    if request.method == 'POST' and form.validate():
-        return redirect(url_for('route',
-                        address1=form.address1.data,
-                        address2=form.address2.data,
-                        alpha=form.alpha.data))
 
-    return render_template("index.html", map_name='map-init.html', form=form)
+@app.route('/query', methods=['POST'])
+def query():
 
-@app.route('/route', methods=['GET','POST'])
-def route():
+    form = InputForm(request.form)
+    if not form.validate():
+        return jsonify(success=False, message='Invalid input.')
 
-    address1 = request.args.get('address1')
-    address2 = request.args.get('address2')
-    alpha = float(request.args.get('alpha'))
-
-    form = InputForm(request.form,
-                     address1=address1,
-                     address2=address2,
-                     alpha=alpha)
-
-    addresses = (address1, address2)
+    addresses = [form.address1.data, form.address2.data]
     locs = tuple(geolocator.geocode(address) for address in addresses)
+    alpha = float(form.alpha.data)
 
     for loc, address in zip(locs, addresses):
         if not loc:
-            flash("Sorry, I don't recognize '{}'. Try something else?"
-                  .format(address))
-            return redirect(url_for('index'))
-
-
-    # find optimal route
+            msg = "Sorry, I don't recognize '{}'. Try something else?"
+            return jsonify(success=False, message=msg.format(address))
 
     nodes = tuple(db.get_nearest_xnodes(
                     loc.latitude,
@@ -70,41 +55,41 @@ def route():
 
     for node, address in zip(nodes, addresses):
         if not node:
-            flash("Sorry, I don't have data near {} yet. Try something else?"
-                  .format(address))
-            return redirect(url_for('index'))
-
-    waypoints = db.get_relevant_waypoints(nodes[0], nodes[1])
-    G = RoutingGraph(waypoints, alpha)
+            msg = "Sorry, I don't have data near {} yet. Try something else?"
+            return jsonify(success=False, message=msg.format(address))
 
     try:
-        nodes, edges = G.get_optimal_path(nodes[0].id, nodes[1].id)
+        path, dist = get_optimal_path(nodes[0], nodes[1], alpha)
     except:
-        flash("Sorry, I couldn't find a route. Try something else?")
-        return redirect(url_for('index'))
+        msg = "Sorry, I couldn't find a route. Try something else?"
+        return jsonify(success=False, message=msg)
 
+    latlngs = [(lat, lng) for _, lat, lng in path]
+    clusters = get_nearby_clusters(path)
+
+    dist_mi = dist/1609.34
+    aan = 'a' if str(dist_mi)[0] in '012345679' else 'an'
+    msg = 'Found {} {:.1f}-mile walk.'.format(aan, dist_mi)
+
+    return jsonify(success=True,
+                   message=msg,
+                   latlngs=latlngs,
+                   dist=dist,
+                   clusters=clusters)
+
+
+def get_optimal_path(node1, node2, alpha):
+
+    # build road graph
+    waypoints = db.get_relevant_waypoints(node1, node2)
+    rg = RoutingGraph(waypoints, alpha)
+    _, edges = rg.get_optimal_path(node1.id, node2.id)
     dist = sum(edge['dist'] for edge in edges)
-    miles = dist/1609.34
-    aan = 'a' if str(miles)[0] in '012345679' else 'an'
-    flash('Found {} {:.1f} mile walk.'.format(aan, miles))
+    path = []
 
 
-    # create map
-
-    latlons = tuple(np.array([loc.latitude, loc.longitude]) for loc in locs)
-    latlon_center = 0.5*(latlons[0] + latlons[1])
-
-    bmap = folium.Map(
-        location=tuple(latlon_center),
-        zoom_start=12
-    )
-
-    bmap.simple_marker(location=latlons[0])
-    bmap.simple_marker(location=latlons[1])
-    nearby_labels = set()
-
+    # get detailed path information for each edge
     for edge in edges:
-
         nodes = (
             db.session.query(
                 Node,
@@ -114,62 +99,58 @@ def route():
             .filter(
                 (Waypoint.way_id == edge['way_id']) &
                 (Waypoint.idx >= edge['idx1']) &
-                (Waypoint.idx <= edge['idx2'])))
-        
-        yx = []
+                (Waypoint.idx <= edge['idx2']))
+            .order_by(Waypoint.idx).all())
 
-        for node, x, y in nodes:
+        if edge['reversed']:
+            nodes = nodes[::-1]
 
-            yx.append((y, x))
-            geog = cast(node.loc, Geography)
+        path.extend((node.id, y, x) for node, x, y in nodes)
 
-            nearby_labels_query = (
-                session.query(PhotoCluster.label)
-                .filter(PhotoCluster.centroid.ST_DWithin(
-                        geog, app.config['SIGHT_DISTANCE'])))
+    return path, dist
 
-            nearby_labels.update(label for (label,) in nearby_labels_query)
 
-        bmap.line(yx)
+def get_nearby_clusters(path):
 
-    nearby_clusters = (
+    node_ids = set(r[0] for r in path)
+    nodes_query = db.session.query(Node.loc).filter(Node.id.in_(node_ids))
+
+    # find set of clusters near nodes in the path
+    nearby_clusters = set([])
+
+    for node in nodes_query:
+
+        nearby_clusters_query = (
+            session.query(PhotoCluster.label)
+            .filter(PhotoCluster.centroid.ST_DWithin(
+                    cast(node.loc, Geography), app.config['SIGHT_DISTANCE'])))
+
+        nearby_clusters.update(label for (label,) in nearby_clusters_query)
+
+    # get info for nearby clusters
+    clusters_query = (
         session.query(
             PhotoCluster,
             ST_X(cast(PhotoCluster.centroid, Geometry)),
             ST_Y(cast(PhotoCluster.centroid, Geometry)))
-        .filter(PhotoCluster.label.in_(nearby_labels)))
+        .filter(PhotoCluster.label.in_(nearby_clusters)))
 
-    for cluster, x, y in nearby_clusters:
+    # construct the response
+    clusters = []
+    for cluster, x, y in clusters_query:
 
         most_viewed_url = (
             session.query(Photo.url)
             .filter(Photo.id == cluster.most_viewed)
             .first())[0]
 
-        bmap.circle_marker(
-            location=(y, x),
-            popup='<img src={url} width={width}>'.format(
-                url=most_viewed_url,
-                width=app.config['IMAGE_WIDTH']),
-            fill_color='red',
-            line_color='red',
-            radius=5*np.sqrt(cluster.num_photos)
-        )
-        
+        clusters.append({
+            'location': (y, x),
+            'size': cluster.num_photos,
+            'repr_url': most_viewed_url,
+        })
 
-    # mark photo clusters
-
-    map_name = 'map-output.html'
-    map_path = 'templates/{}'.format(map_name)
-    bmap.create_map(path=map_path)
-
-    return render_template(
-        'index.html',
-        map_name=map_name,
-        form=form,
-        address1=addresses[0],
-        address2=addresses[1],
-        alpha=alpha)
+    return clusters
 
 
 if __name__ == '__main__':
