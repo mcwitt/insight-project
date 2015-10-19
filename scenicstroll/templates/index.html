@@ -84,6 +84,10 @@
     <!-- bootstrap-slider -->
     <script src="static/dist/bootstrap-slider.min.js"></script>
 
+    <!-- spinner -->
+    <script type="text/javascript" src="static/dist/spin.min.js"></script>
+    <script type="text/javascript" src="static/dist/leaflet.spin.js"></script>
+
     <!-- Google Maps API (for geocomplete)-->
     <script src="http://maps.googleapis.com/maps/api/js?sensor=false&libraries=places"></script>
     <script src="static/dist/jquery.geocomplete.min.js"></script>
@@ -135,12 +139,14 @@
 
         $('form').on('submit', function(e){
             e.preventDefault();
+            map.spin(true);
             $.ajax({
-              type    : "POST",
-              cache   : false,
-              url     : $(this).attr('action'),
-              data    : $(this).serialize(),
-              success : function(data) {
+              type: "POST",
+              cache: false,
+              url: $(this).attr('action'),
+              data: $(this).serialize(),
+              success: function(data) {
+                map.spin(false);
                 $('#status').html(data.message);
                 if (data.success) {
                   map.removeLayer(route);
